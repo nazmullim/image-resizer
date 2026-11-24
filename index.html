@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Image Resizer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📐</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#eef1f4;--panel:#fff;--ink:#14202b;--mute:#5d6b78;--line:#cfd6dd;--tape:#ffc400;--tape-ink:#14202b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10171e;--panel:#18222c;--ink:#e8eef3;--mute:#93a1ad;--line:#2b3946}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 Archivo,system-ui,sans-serif;padding:0 16px 48px}
+.wrap{max-width:860px;margin:0 auto}
+.tape{height:34px;margin:0 -16px;background:var(--tape);
+  background-image:repeating-linear-gradient(90deg,var(--tape-ink) 0 2px,transparent 2px 12px),repeating-linear-gradient(90deg,var(--tape-ink) 0 2px,transparent 2px 60px);
+  background-size:12px 10px,60px 18px;background-repeat:repeat-x;background-position:0 0}
+h1{font-size:clamp(2rem,6vw,3.2rem);font-weight:800;letter-spacing:-.02em;line-height:1.05;margin:28px 0 6px}
+.sub{color:var(--mute);margin:0 0 24px;max-width:56ch}
+.drop{border:2px dashed var(--line);background:var(--panel);border-radius:6px;padding:36px 20px;text-align:center;cursor:pointer;transition:border-color .15s,background .15s}
+.drop:hover,.drop.on,.drop:focus-visible{border-color:var(--ink);outline:none}
+.drop.on{background:color-mix(in srgb,var(--tape) 18%,var(--panel))}
+.drop b{font-size:1.15rem}
+.drop span{display:block;color:var(--mute);font-size:.9rem;margin-top:4px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;margin-top:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:4px}
+input[type=number],select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=range]{width:100%;accent-color:var(--ink)}
+input[type=color]{width:100%;height:40px;padding:3px;border:1px solid var(--line);border-radius:4px;background:var(--bg);cursor:pointer}
+.chk{display:flex;gap:8px;align-items:center;font-weight:400;font-size:.92rem;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-top:14px}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+button{font:inherit;font-weight:600;padding:10px 16px;border-radius:4px;border:1px solid var(--ink);background:var(--panel);color:var(--ink);cursor:pointer}
+button.main{background:var(--tape);color:var(--tape-ink);border-color:var(--tape-ink)}
+button:disabled{opacity:.45;cursor:not-allowed}
+.list{margin-top:16px;display:grid;gap:10px}
+.item{display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px}
+.item img{width:64px;height:64px;object-fit:cover;border-radius:4px;background:var(--bg)}
+.nm{font-weight:600;overflow-wrap:anywhere}
+.meta{font-size:.85rem;color:var(--mute)}
+.save{color:#0a7a3d;font-weight:600}
+@media (prefers-color-scheme:dark){.save{color:#4ade80}}
+.acts{display:flex;gap:6px}
+.acts button{padding:7px 12px;font-size:.88rem}
+.bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px}
+.empty{color:var(--mute);text-align:center;padding:10px}
+.sr{position:absolute;left:-9999px}
+@media (max-width:520px){.item{grid-template-columns:48px 1fr}.item img{width:48px;height:48px}.acts{grid-column:1/-1}}
+</style>
+</head>
+<body>
+<div class="tape" aria-hidden="true"></div>
+<div class="wrap">
+<h1>Image Resizer</h1>
+<p class="sub">Resize, compress and convert images right in your browser. Nothing is uploaded — your files never leave this device.</p>
+
+<div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose images">
+  <b>Drop images here, or click to choose</b>
+  <span>JPG, PNG, WebP — you can also paste from the clipboard</span>
+</div>
+<input class="sr" type="file" id="file" accept="image/*" multiple>
+
+<div class="panel">
+  <div class="grid">
+    <div><label for="mode">Resize by</label>
+      <select id="mode"><option value="px">Pixels</option><option value="pct">Percentage</option></select></div>
+    <div id="wBox"><label for="w">Width (px)</label><input type="number" id="w" min="1" placeholder="Auto"></div>
+    <div id="hBox"><label for="h">Height (px)</label><input type="number" id="h" min="1" placeholder="Auto"></div>
+    <div id="pBox" hidden><label for="p">Scale (%)</label><input type="number" id="p" min="1" max="500" value="50"></div>
+    <div><label for="fmt">Format</label>
+      <select id="fmt"><option value="orig">Same as original</option><option value="image/jpeg">JPEG</option><option value="image/png">PNG</option><option value="image/webp">WebP</option></select></div>
+    <div><label for="bg">Background</label>
+      <select id="bg"><option value="none">Keep original</option><option value="#ffffff">White</option><option value="custom">Solid color</option></select></div>
+    <div id="cBox" hidden><label for="bc">Pick color</label><input type="color" id="bc" value="#ffc400"></div>
+  </div>
+  <div class="row">
+    <div style="flex:1;min-width:200px"><label for="q">Quality: <span id="qv">85</span>%</label><input type="range" id="q" min="30" max="100" value="85"></div>
+  </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="lock" checked> Keep aspect ratio</label>
+    <label class="chk"><input type="checkbox" id="noup" checked> Don't enlarge small images</label>
+  </div>
+</div>
+
+<div class="bar" id="bar" hidden>
+  <span class="meta" id="count"></span>
+  <div class="acts">
+    <button id="clear">Clear all</button>
+    <button class="main" id="zip">Download all</button>
+  </div>
+</div>
+<div class="list" id="list"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const items=[];
+const EXT={'image/jpeg':'jpg','image/png':'png','image/webp':'webp'};
+const kb=n=>n<1048576?(n/1024).toFixed(1)+' KB':(n/1048576).toFixed(2)+' MB';
+let timer;
+
+function dims(it){
+  const sw=it.bmp.width, sh=it.bmp.height;
+  let w,h;
+  if($('mode').value==='pct'){
+    const s=Math.max(1,+$('p').value||100)/100; w=sw*s; h=sh*s;
+  }else{
+    const iw=+$('w').value||0, ih=+$('h').value||0, lock=$('lock').checked;
+    if(!iw&&!ih){w=sw;h=sh}
+    else if(!lock){w=iw||sw;h=ih||sh}
+    else if(iw&&ih){const s=Math.min(iw/sw,ih/sh);w=sw*s;h=sh*s}
+    else if(iw){w=iw;h=sh*iw/sw}
+    else{h=ih;w=sw*ih/sh}
+  }
+  if($('noup').checked&&(w>sw||h>sh)){w=sw;h=sh}
+  return [Math.max(1,Math.round(w)),Math.max(1,Math.round(h))];
+}
+
+async function render(it){
+  const [w,h]=dims(it);
+  let type=$('fmt').value; if(type==='orig') type=EXT[it.file.type]?it.file.type:'image/png';
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d'); x.imageSmoothingQuality='high';
+  const bg=$('bg').value;
+  const fill=bg==='custom'?$('bc').value:(bg==='none'?(type==='image/jpeg'?'#ffffff':null):bg);
+  if(fill){x.fillStyle=fill;x.fillRect(0,0,w,h)}
+  x.drawImage(it.bmp,0,0,w,h);
+  const blob=await new Promise(r=>c.toBlob(r,type,+$('q').value/100));
+  it.out={blob,w,h,type};
+}
+
+async function renderAll(){
+  await Promise.all(items.map(render));
+  draw();
+}
+function queue(){clearTimeout(timer);timer=setTimeout(renderAll,200)}
+
+function draw(){
+  const list=$('list'); list.textContent='';
+  $('bar').hidden=!items.length;
+  $('count').textContent=items.length+(items.length===1?' image':' images');
+  items.forEach((it,i)=>{
+    const o=it.out; if(!o) return;
+    const diff=Math.round((1-o.blob.size/it.file.size)*100);
+    const base=it.file.name.replace(/\.[^.]+$/,'');
+    const name=`${base}-${o.w}x${o.h}.${EXT[o.type]}`;
+    const d=document.createElement('div'); d.className='item';
+    d.innerHTML=`<img alt=""><div><div class="nm"></div><div class="meta"></div></div><div class="acts"><button class="dl">Download</button><button class="rm" aria-label="Remove">Remove</button></div>`;
+    d.querySelector('img').src=it.url;
+    d.querySelector('.nm').textContent=name;
+    d.querySelector('.meta').innerHTML=`${it.bmp.width}×${it.bmp.height} → <b>${o.w}×${o.h}</b> · ${kb(it.file.size)} → ${kb(o.blob.size)} · <span class="${diff>0?'save':''}">${diff>0?diff+'% smaller':(diff<0?Math.abs(diff)+'% larger':'same size')}</span>`;
+    d.querySelector('.dl').onclick=()=>save(o.blob,name);
+    d.querySelector('.rm').onclick=()=>{URL.revokeObjectURL(it.url);items.splice(i,1);draw()};
+    it.name=name; list.appendChild(d);
+  });
+}
+
+function save(blob,name){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+async function add(files){
+  const imgs=[...files].filter(f=>f.type.startsWith('image/'));
+  for(const f of imgs){
+    try{
+      const bmp=await createImageBitmap(f,{imageOrientation:'from-image'});
+      const it={file:f,bmp,url:URL.createObjectURL(f)};
+      await render(it); items.push(it);
+    }catch(e){alert(`Could not open "${f.name}". Try a JPG, PNG or WebP file.`)}
+  }
+  draw();
+}
+
+const drop=$('drop'), file=$('file');
+drop.onclick=()=>file.click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();file.click()}};
+file.onchange=()=>{add(file.files);file.value=''};
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('on')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('on')}));
+drop.addEventListener('drop',e=>add(e.dataTransfer.files));
+addEventListener('paste',e=>{if(e.clipboardData.files.length)add(e.clipboardData.files)});
+
+$('mode').onchange=()=>{const p=$('mode').value==='pct';$('wBox').hidden=p;$('hBox').hidden=p;$('pBox').hidden=!p;queue()};
+['w','h','p','fmt','lock','noup','bg','bc'].forEach(id=>$(id).addEventListener('input',queue));
+$('bg').addEventListener('change',()=>{$('cBox').hidden=$('bg').value!=='custom'});
+$('q').addEventListener('input',()=>{$('qv').textContent=$('q').value;queue()});
+
+$('clear').onclick=()=>{items.forEach(i=>URL.revokeObjectURL(i.url));items.length=0;draw()};
+$('zip').onclick=async()=>{
+  if(items.length===1||typeof JSZip==='undefined'){items.forEach(i=>save(i.out.blob,i.name));return}
+  const z=new JSZip(), used={};
+  items.forEach(i=>{let n=i.name;if(used[n]){n=n.replace(/(\.\w+)$/,`-${used[n]}$1`)}used[i.name]=(used[i.name]||0)+1;z.file(n,i.out.blob)});
+  save(await z.generateAsync({type:'blob'}),'resized-images.zip');
+};
+</script>
+</body>
+</html>
