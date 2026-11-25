@@ -82,6 +82,13 @@ button:disabled{opacity:.45;cursor:not-allowed}
     <label class="chk"><input type="checkbox" id="lock" checked> Keep aspect ratio</label>
     <label class="chk"><input type="checkbox" id="noup" checked> Don't enlarge small images</label>
   </div>
+  <div class="row">
+    <label class="chk"><input type="checkbox" id="rm"> Replace existing background (works best on plain backgrounds)</label>
+  </div>
+  <div class="row" id="rmBox" hidden>
+    <div style="flex:1;min-width:200px"><label for="tol">Sensitivity: <span id="tv">30</span></label><input type="range" id="tol" min="5" max="100" value="30"></div>
+    <label class="chk"><input type="checkbox" id="holes"> Also remove inside holes</label>
+  </div>
 </div>
 
 <div class="bar" id="bar" hidden>
@@ -119,6 +126,48 @@ function dims(it){
   return [Math.max(1,Math.round(w)),Math.max(1,Math.round(h))];
 }
 
+// Removes a plain background: estimates it from the 4 corners (handles soft gradients),
+// then erases pixels connected to the image edge that are close to that estimate.
+function cutout(bmp,w,h){
+  const s=document.createElement('canvas'); s.width=w; s.height=h;
+  const g=s.getContext('2d',{willReadFrequently:true}); g.imageSmoothingQuality='high'; g.drawImage(bmp,0,0,w,h);
+  const im=g.getImageData(0,0,w,h), d=im.data, n=w*h;
+  const pz=Math.max(1,Math.min(5,w>>2,h>>2));
+  const corner=(cx,cy)=>{let r=0,gg=0,b=0,k=0;
+    for(let y=cy;y<cy+pz;y++)for(let x=cx;x<cx+pz;x++){const i=(y*w+x)*4;r+=d[i];gg+=d[i+1];b+=d[i+2];k++}
+    return [r/k,gg/k,b/k]};
+  const tl=corner(0,0),tr=corner(w-pz,0),bl=corner(0,h-pz),br=corner(w-pz,h-pz);
+  const tol=+$('tol').value;
+  const dist=p=>{
+    const x=p%w,y=(p/w)|0,u=x/Math.max(1,w-1),v=y/Math.max(1,h-1),i=p*4;let s=0;
+    for(let c=0;c<3;c++){
+      const ref=(1-v)*((1-u)*tl[c]+u*tr[c])+v*((1-u)*bl[c]+u*br[c]);
+      s+=(d[i+c]-ref)**2}
+    return Math.sqrt(s)};
+  const del=new Uint8Array(n);
+  if($('holes').checked){
+    for(let p=0;p<n;p++) if(dist(p)<=tol) del[p]=1;
+  }else{
+    const st=new Int32Array(n); let sp=0;
+    const push=p=>{if(!del[p]&&dist(p)<=tol){del[p]=1;st[sp++]=p}};
+    for(let x=0;x<w;x++){push(x);push((h-1)*w+x)}
+    for(let y=0;y<h;y++){push(y*w);push(y*w+w-1)}
+    while(sp){const p=st[--sp],x=p%w;
+      if(x>0)push(p-1); if(x<w-1)push(p+1); if(p>=w)push(p-w); if(p<n-w)push(p+w)}
+  }
+  for(let p=0;p<n;p++){
+    const i=p*4;
+    if(del[p]){d[i+3]=0;continue}
+    const x=p%w;
+    if((x>0&&del[p-1])||(x<w-1&&del[p+1])||(p>=w&&del[p-w])||(p<n-w&&del[p+w])){
+      const a=(dist(p)-tol)/(tol*0.8+1);
+      d[i+3]=Math.round(Math.max(0,Math.min(1,a))*255);
+    }
+  }
+  g.putImageData(im,0,0);
+  return s;
+}
+
 async function render(it){
   const [w,h]=dims(it);
   let type=$('fmt').value; if(type==='orig') type=EXT[it.file.type]?it.file.type:'image/png';
@@ -127,7 +176,7 @@ async function render(it){
   const bg=$('bg').value;
   const fill=bg==='custom'?$('bc').value:(bg==='none'?(type==='image/jpeg'?'#ffffff':null):bg);
   if(fill){x.fillStyle=fill;x.fillRect(0,0,w,h)}
-  x.drawImage(it.bmp,0,0,w,h);
+  x.drawImage($('rm').checked?cutout(it.bmp,w,h):it.bmp,0,0,w,h);
   const blob=await new Promise(r=>c.toBlob(r,type,+$('q').value/100));
   it.out={blob,w,h,type};
 }
@@ -185,7 +234,12 @@ drop.addEventListener('drop',e=>add(e.dataTransfer.files));
 addEventListener('paste',e=>{if(e.clipboardData.files.length)add(e.clipboardData.files)});
 
 $('mode').onchange=()=>{const p=$('mode').value==='pct';$('wBox').hidden=p;$('hBox').hidden=p;$('pBox').hidden=!p;queue()};
-['w','h','p','fmt','lock','noup','bg','bc'].forEach(id=>$(id).addEventListener('input',queue));
+['w','h','p','fmt','lock','noup','bg','bc','rm','tol','holes'].forEach(id=>$(id).addEventListener('input',queue));
+$('tol').addEventListener('input',()=>{$('tv').textContent=$('tol').value});
+$('rm').addEventListener('change',()=>{
+  $('rmBox').hidden=!$('rm').checked;
+  if($('rm').checked&&$('bg').value==='none'){$('bg').value='#ffffff'}
+});
 $('bg').addEventListener('change',()=>{$('cBox').hidden=$('bg').value!=='custom'});
 $('q').addEventListener('input',()=>{$('qv').textContent=$('q').value;queue()});
 
